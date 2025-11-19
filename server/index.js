@@ -28,12 +28,29 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/wgymd', async (_req, res) => {
+app.get('/wgymd', async (req, res) => {
   try {
     const pool = await sql.connect(config);
-    const result = await pool
-      .request()
-      .query('SELECT TOP (200) * FROM WGYMD');
+    const request = pool.request();
+    const { ymd } = req.query;
+    if (ymd) {
+      // ymd는 'YYYYMMDD' 또는 'YYYY-MM-DD' 모두 허용 → 숫자만 비교
+      const raw = String(ymd);
+      const digits = raw.replace(/[^0-9]/g, '').slice(0, 8);
+      request.input('ymdDigits', sql.VarChar(8), digits);
+      const result = await request.query(`
+        SELECT TOP (500) *
+        FROM WGYMD
+        WHERE REPLACE(YMD, '-', '') = @ymdDigits
+        ORDER BY YMD DESC, TIME1 DESC
+      `);
+      return res.json(result.recordset);
+    }
+    const result = await request.query(`
+      SELECT TOP (50) *
+      FROM WGYMD
+      ORDER BY YMD DESC, TIME1 DESC
+    `);
     res.json(result.recordset);
   } catch (err) {
     console.error('MSSQL error:', err);
